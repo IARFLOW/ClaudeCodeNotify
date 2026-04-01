@@ -24,6 +24,10 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         let bundleID = terminalBundleID()
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
             app.activate()
+            // Double-activate after a short delay to ensure keyboard focus
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                app.activate()
+            }
         } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
         }
