@@ -7,12 +7,13 @@ Native macOS notification system for [Claude Code](https://docs.anthropic.com/en
 ## Features
 
 - **Native macOS notifications** via `UNUserNotificationCenter` — no third-party dependencies
-- **Click-to-focus**: clicking a notification activates your terminal window
+- **Click-to-focus**: clicking a notification activates your terminal window with full keyboard focus
 - **Differentiated alerts**: distinct sounds and messages for "task complete" vs "permission needed"
+- **Smart suppression**: skips permission notifications when your terminal is already focused
 - **Claude icon**: notifications display the Claude app icon
-- **Action button**: "Open Terminal" button for quick access
+- **Daemon mode**: runs persistently in the background, watching a trigger file — no process spawning per notification
 - **Terminal agnostic**: works with Warp, iTerm2, Kitty, Alacritty, Terminal.app, or any terminal
-- **Lightweight**: compiled Swift binary, runs in the background, auto-exits after 2 minutes
+- **Lightweight**: compiled Swift binary, background daemon with zero CPU when idle
 
 ## Requirements
 
@@ -31,11 +32,23 @@ bash scripts/install.sh
 
 When macOS asks to allow notifications, click **Allow**.
 
+## How It Works
+
+ClaudeCodeNotify runs as a **background daemon** that watches the file `~/.claude/notify-trigger`. Claude Code hooks write notification data to this file, and the daemon picks it up instantly, sends the notification, and clears the file.
+
+The trigger file format is:
+
+```
+message|subtitle|sound|category
+```
+
+For example: `Finished and waiting|Done|Glass.aiff|IDLE_PROMPT`
+
+When you click a notification, it activates your terminal with full keyboard focus — no mouse click needed.
+
 ## Configure Claude Code Hooks
 
 Add the following to your `~/.claude/settings.json`:
-
-### For Warp
 
 ```json
 {
@@ -46,16 +59,18 @@ Add the following to your `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/Applications/ClaudeCodeNotify.app/Contents/MacOS/ClaudeCodeNotify 'Needs your permission to continue' 'Action Required' 'Basso' 'PERMISSION_PROMPT' &"
+            "command": "echo 'Needs your permission to continue|Action Required|Basso.aiff|PERMISSION_PROMPT' > ~/.claude/notify-trigger"
           }
         ]
-      },
+      }
+    ],
+    "Stop": [
       {
-        "matcher": "idle_prompt",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "/Applications/ClaudeCodeNotify.app/Contents/MacOS/ClaudeCodeNotify 'Finished and waiting for your response' 'Done' 'Glass' 'IDLE_PROMPT' &"
+            "command": "echo 'Finished and waiting for your response|Done|Glass.aiff|STOP' > ~/.claude/notify-trigger"
           }
         ]
       }
@@ -64,26 +79,15 @@ Add the following to your `~/.claude/settings.json`:
 }
 ```
 
+> **Note:** The `Stop` hook fires every time Claude finishes responding. The `Notification` hook with `permission_prompt` matcher fires when Claude needs your approval to proceed.
+
 ### For other terminals
 
-Set the `--terminal` flag or the `CLAUDE_NOTIFY_TERMINAL` environment variable to your terminal's bundle identifier:
+Set the `CLAUDE_NOTIFY_TERMINAL` environment variable to your terminal's bundle identifier:
 
-```json
-{
-  "hooks": {
-    "Notification": [
-      {
-        "matcher": "idle_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Applications/ClaudeCodeNotify.app/Contents/MacOS/ClaudeCodeNotify 'Finished and waiting for your response' 'Done' 'Glass' 'IDLE_PROMPT' --terminal com.googlecode.iterm2 &"
-          }
-        ]
-      }
-    ]
-  }
-}
+```bash
+# Add to your ~/.zshrc or ~/.bashrc
+export CLAUDE_NOTIFY_TERMINAL="com.googlecode.iterm2"
 ```
 
 <details>
@@ -107,23 +111,38 @@ defaults read /Applications/YourTerminal.app/Contents/Info.plist CFBundleIdentif
 
 </details>
 
-## Usage
-
-```
-ClaudeCodeNotify <message> [subtitle] [sound] [category] [--terminal <bundle_id>]
-```
-
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `message` | Notification body text | `"Claude Code needs your attention"` |
-| `subtitle` | Notification subtitle | *(empty)* |
-| `sound` | macOS sound name | `Glass` |
-| `category` | `IDLE_PROMPT` or `PERMISSION_PROMPT` | `IDLE_PROMPT` |
-| `--terminal` | Terminal app bundle ID | `dev.warp.Warp-Stable` |
-
 ### Available macOS sounds
 
 `Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `Morse`, `Ping`, `Pop`, `Purr`, `Sosumi`, `Submarine`, `Tink`
+
+## Auto-start with LaunchAgent
+
+To keep the daemon running automatically, create `~/Library/LaunchAgents/com.iarflow.claudecodenotify.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.iarflow.claudecodenotify</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/ClaudeCodeNotify.app/Contents/MacOS/ClaudeCodeNotify</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+```
+
+Then load it:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.iarflow.claudecodenotify.plist
+```
 
 ## Tips
 
@@ -135,26 +154,11 @@ By default, macOS banners disappear after a few seconds. To make them stay:
 2. Find **Claude Code** in the app list
 3. Change notification style from **Banners** to **Alerts**
 
-### Environment variable
-
-Instead of using `--terminal`, you can set the terminal globally:
-
-```bash
-# Add to your ~/.zshrc or ~/.bashrc
-export CLAUDE_NOTIFY_TERMINAL="com.googlecode.iterm2"
-```
-
-## How It Works
-
-ClaudeCodeNotify is a minimal native macOS app built with Swift. It uses Apple's `UNUserNotificationCenter` API to deliver notifications and handle user interactions.
-
-When Claude Code triggers a hook event (task complete or permission needed), it launches the binary directly. The app sends the notification and stays alive briefly to handle clicks. When you click the notification or the "Open Terminal" action button, it activates your terminal app and exits.
-
-The app runs as a background process (`LSUIElement`) — it won't appear in your Dock or app switcher.
-
 ## Uninstall
 
 ```bash
+launchctl unload ~/Library/LaunchAgents/com.iarflow.claudecodenotify.plist
+rm ~/Library/LaunchAgents/com.iarflow.claudecodenotify.plist
 rm -rf /Applications/ClaudeCodeNotify.app
 ```
 
