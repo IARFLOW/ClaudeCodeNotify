@@ -29,20 +29,31 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler handler: @escaping () -> Void) {
-        activateTerminal()
-        handler()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
-    }
-
-    private func activateTerminal() {
         let bundleID = terminalBundleID()
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
         }
+        handler()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
     }
 }
 
 // MARK: - Main
+
+// Kill any previous instances to avoid stacking processes
+let myPID = ProcessInfo.processInfo.processIdentifier
+let runningApps = NSWorkspace.shared.runningApplications
+for app in runningApps where app.bundleIdentifier == "com.claudecode.notifier" && app.processIdentifier != myPID {
+    app.terminate()
+}
+
+// Skip notification if terminal is already the frontmost app
+let termBundleID = terminalBundleID()
+if let frontApp = NSWorkspace.shared.frontmostApplication,
+   frontApp.bundleIdentifier == termBundleID {
+    exit(0)
+}
+
 let app = NSApplication.shared
 let delegate = NotificationDelegate()
 let center = UNUserNotificationCenter.current()
