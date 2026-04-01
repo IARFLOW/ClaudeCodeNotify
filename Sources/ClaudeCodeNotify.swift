@@ -80,13 +80,11 @@ class TriggerWatcher {
         let sound    = parts.count > 2 ? parts[2] : "Glass"
         let category = parts.count > 3 ? parts[3] : "IDLE_PROMPT"
 
-        // Skip permission notifications if terminal is focused
-        if category == "PERMISSION_PROMPT" {
-            if let frontApp = NSWorkspace.shared.frontmostApplication,
-               frontApp.bundleIdentifier == terminalBundleID() {
-                clearAndRewatch()
-                return
-            }
+        // Skip all notifications if terminal is focused
+        if let frontApp = NSWorkspace.shared.frontmostApplication,
+           frontApp.bundleIdentifier == terminalBundleID() {
+            clearAndRewatch()
+            return
         }
 
         sendNotification(body: body, subtitle: subtitle, sound: sound, category: category)
