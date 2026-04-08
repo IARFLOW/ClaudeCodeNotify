@@ -148,7 +148,8 @@ if CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "--setup" {
     let action = UNNotificationAction(identifier: "OPEN_TERMINAL", title: "Open", options: .foreground)
     center.setNotificationCategories([
         UNNotificationCategory(identifier: "PERMISSION_PROMPT", actions: [action], intentIdentifiers: []),
-        UNNotificationCategory(identifier: "IDLE_PROMPT", actions: [action], intentIdentifiers: [])
+        UNNotificationCategory(identifier: "IDLE_PROMPT", actions: [action], intentIdentifiers: []),
+        UNNotificationCategory(identifier: "STOP", actions: [action], intentIdentifiers: [])
     ])
 
     // Start watching trigger file
