@@ -154,6 +154,38 @@ By default, macOS banners disappear after a few seconds. To make them stay:
 2. Find **Claude Code** in the app list
 3. Change notification style from **Banners** to **Alerts**
 
+## Troubleshooting
+
+### Notifications appear but clicking them does nothing
+
+If click-to-focus stops activating your terminal even though notifications are still being delivered, macOS's internal notification router (`usernoted`) may have a stale delegate reference. Reset it with:
+
+```bash
+killall usernoted
+```
+
+`usernoted` respawns automatically in under a second with no data loss. This is a generic macOS fix, not specific to ClaudeCodeNotify — it's worth knowing for any notification-based app.
+
+### Notifications don't appear at all
+
+1. Check the daemon is running:
+
+   ```bash
+   pgrep -fl ClaudeCodeNotify
+   ```
+
+   There should be **exactly one** process. If there are zero, load the LaunchAgent. If there are more than one, something went wrong with install — run `pkill -f ClaudeCodeNotify` and reinstall.
+
+2. Test the daemon directly, bypassing Claude Code hooks:
+
+   ```bash
+   echo 'Test|From terminal|Glass.aiff|IDLE_PROMPT' > ~/.claude/notify-trigger
+   ```
+
+   Run this from an app **other** than your terminal (otherwise the built-in focus suppression kicks in). If you get a notification, the daemon is healthy and the issue is in your hook configuration.
+
+3. Verify the app has notification permission in **System Settings → Notifications → Claude Code**.
+
 ## Uninstall
 
 ```bash
